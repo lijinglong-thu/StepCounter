@@ -29,7 +29,8 @@ class Ticker extends Thread implements SensorEventListener {
   /**
    * The most recent event, received from the <code>Sensor</code>
    */
-  private SensorEvent currentEvent;
+  private SensorEvent currentAccEvent;
+  private SensorEvent currentGyroEvent;
 
   /** 
    * The activity, we are ticking for
@@ -67,7 +68,14 @@ class Ticker extends Thread implements SensorEventListener {
 
   // Interface: SensorEventListener
   public void onSensorChanged(SensorEvent event) {
-    worker.currentEvent = event;
+      switch(event.sensor.getType()){
+          case Sensor.TYPE_ACCELEROMETER:
+              worker.currentAccEvent = event;
+              break;
+          case Sensor.TYPE_GYROSCOPE:
+              worker.currentGyroEvent = event;
+              break;
+      }
   }
   
   @Override
@@ -88,8 +96,8 @@ class Ticker extends Thread implements SensorEventListener {
     }
     else {
       // We are the worker -> update the UI
-      if (currentEvent!=null) {
-        activity.onTick(currentEvent);
+      if (currentAccEvent!=null && currentGyroEvent != null) {
+        activity.doPdrDraw(currentAccEvent,currentGyroEvent);
       }
     }
   }

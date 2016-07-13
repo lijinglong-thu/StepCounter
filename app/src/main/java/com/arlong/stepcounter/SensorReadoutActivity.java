@@ -1,29 +1,21 @@
 package com.arlong.stepcounter;
 
 import android.app.Activity;
-import android.graphics.Color;
-import android.graphics.Paint;
+import android.graphics.PointF;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.widget.Button;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.achartengine.ChartFactory;
-import org.achartengine.GraphicalView;
-import org.achartengine.model.XYMultipleSeriesDataset;
-import org.achartengine.model.XYSeries;
-import org.achartengine.renderer.XYMultipleSeriesRenderer;
-import org.achartengine.renderer.XYSeriesRenderer;
 
-public class SensorReadoutActivity extends Activity {
+public class SensorReadoutActivity extends Activity implements  OnClickListener,RefreshableView{
 
     // Sensor 配置
     private static final String TAG = "SensorScan";
@@ -31,15 +23,12 @@ public class SensorReadoutActivity extends Activity {
 
     private Sensor accSensor;
     private Sensor gyroSensor;
-    private Sensor magSensor;
-
-    private float[] accValues = new float[4];
-    private float[] gyroValues = new float[4];
-    private float[] magValues = new float[4];
 
     // 计步参数
     private int accNo = 0;
     public int stepNo = 0;
+    public float stepLength;
+    public float heading;
     private float[] accold1 = new float[2];
     private float[] accold2 = new float[2];
     private float[] accnew = new float[2];
@@ -48,16 +37,15 @@ public class SensorReadoutActivity extends Activity {
     private float deltaTime = 0.15f;
     private float deltaA = 1.4f;
     private boolean peakmaxReady;
-
+    private float locationx, locationy;
     //采样频率
     public static final int sampleRate = 20;
 
-    // UI 配置
-    private Button btnScanStart;
-    private Button btnScanStop;
-    private Button btnClear;
     private TextView tvStep;
-    private LinearLayout chartLyt;
+    private TextView tvStepLength;
+    private TextView tvHeading;
+    private TextView tvLocation;
+    private MultiTouchView multiTouchView;
 
     //平均滤波参数
     private int N_windows = 5;
@@ -67,194 +55,91 @@ public class SensorReadoutActivity extends Activity {
     // 读取传感器数据时用到的变量
     long timeStart=0;// the timestamp of the first sample，因为event.timestamp格式为long，这里是为了保证相减前不丢数据，否则后面间隔可能为负
     float timestamp;// 距离first sample 的时间间隔
-    /**
-     * The displaying component
-     */
-    private GraphicalView chartView;
 
-    /**
-     * Dataset of the graphing component//sensor��ͼ���ݼ�
-     */
-    private XYMultipleSeriesDataset sensorData;
+    public float beta = 0.3f;								// 2 * proportional gain (Kp)
+    public float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;	// quaternion of sensor frame relative to auxiliary frame
 
+    protected SiteMapDrawable map;
     /**
-     * Renderer for actually drawing the graph//��ͼ��Ⱦ
-     */
-    private XYMultipleSeriesRenderer renderer;
-    /**
-     * Data channels. Corresponds to <code>SensorEvent.values</code>. Individual
-     * channels may be set to null to indicate that they must not be painted.
-     */
-    private XYSeries channel[];
-    /**
-     * The ticker thread takes care of updating the UI
+     * @uml.property name="user"
+     * @uml.associationEnd
      */
     private Thread ticker;
-    /**
-     * For moving the viewport of the graph
-     */
     private int xTick = 0;
+    private Madgwick mMadgwick = new Madgwick();
 
-    /**
-     * For moving the viewport of the grpah
-     */
-    private int lastMinX = 0;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Log.d(TAG, "on Create");
         initUI();
         initSensors();
-        btnScanStart.setOnClickListener(btnListener);
-        btnScanStop.setOnClickListener(btnListener);
-        btnClear.setOnClickListener(btnListener);
-        chartLyt = (LinearLayout) findViewById(R.id.sensorChart);
-        sensorData = new XYMultipleSeriesDataset();
-        renderer = new XYMultipleSeriesRenderer();
-        renderer.setGridColor(Color.DKGRAY);
-        renderer.setShowGrid(true);
-        renderer.setXAxisMin(0.0);
-        renderer.setXTitle(getString(R.string.samplerate, 1000 / sampleRate));
-        renderer.setXAxisMax(10000 / (1000 / sampleRate)); // 10 seconds wide
-        renderer.setXLabels(10); // 1 second per DIV
-        renderer.setChartTitle(" ");
-        renderer.setYLabelsAlign(Paint.Align.RIGHT);
-        chartView = ChartFactory.getLineChartView(this, sensorData, renderer);
-        chartLyt.addView(chartView);
-        float textSize = new TextView(this).getTextSize();
-        float upscale = textSize / renderer.getLegendTextSize();
-        renderer.setLabelsTextSize(textSize);
-        renderer.setLegendTextSize(textSize);
-        renderer.setChartTitleTextSize(textSize);
-        renderer.setAxisTitleTextSize(textSize);
-        renderer.setFitLegend(true);
-        int[] margins = renderer.getMargins();
-        margins[0] *= upscale;
-        margins[1] *= upscale;
-        margins[2] = (int) (2 * renderer.getLegendTextSize());
-        renderer.setMargins(margins);
-        //setContentView(R.layout.activity_main);
-    }
+        MultiTouchDrawable.setGridSpacing(100,100);
 
+        map = new SiteMapDrawable(this,this);
+        map.setScale(30, 30);
+        map.setPos(0, 0, 30, 30, (float) Math.PI, true);
+        map.setSize(map.width / 50, map.height / 50);
+        multiTouchView.setRearrangable(false);
+        multiTouchView.addDrawable(map);
+
+    }
     //Sensor 函数
     //按键监听
-    private Button.OnClickListener btnListener = new Button.OnClickListener()
-    {
-        public void onClick(View v){
-            switch (v.getId())
-            {
-                case R.id.scanStart:
-                    try {
-                        doStartScan();
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-                    break;
-                case R.id.scanStop:
-                    try {
-                        doStopScan();
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-                    break;
-                case R.id.btnClear:
-                    try {
-                        doClear();
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-                    break;
-            }
+    public void onClick(View v) {
+        switch (v.getId())
+        {
+            case R.id.scanStart:
+                try {
+                    doStartScan();
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+                break;
+            case R.id.scanStop:
+                try {
+                    doStopScan();
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+                break;
+            case R.id.btnClear:
+                try {
+                    doClear();
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+                break;
         }
-    };
+    }
+
 
     //****************************************/
     // 初始化函数
     //******************************************/
     private void initUI(){
-        btnScanStart = (Button)findViewById(R.id.scanStart);
-        btnScanStop = (Button)findViewById(R.id.scanStop);
-        btnClear = (Button)findViewById(R.id.btnClear);
+        ((Button)findViewById(R.id.scanStart)).setOnClickListener(this);
+        ((Button)findViewById(R.id.scanStop)).setOnClickListener(this);
+        ((Button)findViewById(R.id.btnClear)).setOnClickListener(this);
         tvStep = (TextView)findViewById(R.id.tvStep);
+        tvStepLength = (TextView)findViewById(R.id.tvStepLength);
+        tvHeading = (TextView)findViewById(R.id.tvHeading);
+        tvLocation = (TextView)findViewById(R.id.tvLocation);
+        multiTouchView = ((MultiTouchView) findViewById(R.id.mapView));
     }
     private void initSensors(){
         sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
         accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         //magSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
-        //gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+        gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
     }
 
-
-    //Sensor Listener
- /*   private SensorEventListener mySensorListener = new SensorEventListener() {
-        @Override
-        public void onSensorChanged(SensorEvent event) {
-            float NS2MS=1.0f/1000000.0f; //event中timestamp为纳秒，纳秒转为毫秒
-            float NS2S=1.0f/1000000000.0f;//纳秒转为秒
-            if(timeStart==0){
-                timeStart=event.timestamp;
-                timestamp=0;
-            }
-            else
-                timestamp=(event.timestamp-timeStart)*NS2S;
-            switch(event.sensor.getType()){
-                case Sensor.TYPE_ACCELEROMETER:
-                    accNo = accNo+1;
-                    //onAccSensorChanged(event.values);
-                    if (stepDetecter(timestamp,event.values)){
-                        stepNo= stepNo+1;
-                        tvStep.setText(Integer.toString(stepNo));
-                    }
-                    break;
-                case Sensor.TYPE_GYROSCOPE:
-                    //onGyroSensorChanged(event.values);
-                    break;
-                case Sensor.TYPE_MAGNETIC_FIELD:
-                    //onMagSensorChanged(event.values);
-                    break;
-            }
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor sensor, int accuracy) {
-
-        }
-    }; */
-
-    //****************************************/
-    // 传感器变化时读取、存储系列函数
-    //******************************************/
-    private void onAccSensorChanged(float[] acc){
-
-        //显示存储
-        StringBuilder stringBuilder=new StringBuilder();
-        accValues[0] = timestamp;
-        accValues[1] = acc[0];
-        accValues[2] = acc[1];
-        accValues[3] = acc[2];
-    }
-    private void onMagSensorChanged(float[] mag){
-        StringBuilder stringBuilder=new StringBuilder();
-        magValues[0] = timestamp;
-        magValues[1] = mag[0];
-        magValues[2] = mag[1];
-        magValues[3] = mag[2];
-    }
-    private void onGyroSensorChanged(float[] gyro){
-        StringBuilder stringBuilder=new StringBuilder();
-        gyroValues[0] = timestamp;
-        gyroValues[1] = gyro[0];
-        gyroValues[2] = gyro[1];
-        gyroValues[3] = gyro[2];
-    }
     //****************************************/
     // 计步函数
     //******************************************/
     private boolean stepDetecter(float Time,float acc){
         float[] normAcc = new float[2];
-        float stepLength;
         boolean isStep;
         isStep = false;
         normAcc[1] = acc;
@@ -276,6 +161,8 @@ public class SensorReadoutActivity extends Activity {
                     peakmin = accold2;
                     if(peakmax[1] - peakmin[1] >deltaA){
                         stepLength =(float)( 0.5 * Math.pow(peakmax[1] - peakmin[1],0.25) );
+                        String str = String.format("%.2f",stepLength);
+                        tvStepLength.setText(str);
                         isStep = true;
                         peakmaxReady = false;
                     }
@@ -316,7 +203,9 @@ public class SensorReadoutActivity extends Activity {
         ticker = new Ticker(this);
         ticker.start();
         sensorManager.registerListener((SensorEventListener) ticker, accSensor, 1000 / sampleRate);
+        sensorManager.registerListener((SensorEventListener) ticker, gyroSensor, 1000 / sampleRate);
         doNotify("Scan Starting");
+
     }
     private void doStopScan() throws Exception {
         Log.d(TAG,"Stop Scan");
@@ -328,11 +217,11 @@ public class SensorReadoutActivity extends Activity {
         doNotify("Scan Stop!");
     }
     private void doClear() throws Exception{
-        sensorData.clear();
-        chartView.repaint();
         xTick = 0;
+        timeStart=0;
         stepNo = 0;
-        tvStep.setText(Integer.toString(stepNo));
+        q0 = 1.0f; q1 = 0.0f; q2 = 0.0f; q3 = 0.0f;
+        tvStep.setText(String.format("%s", stepNo));
     }
 
     //****************************************/
@@ -364,117 +253,51 @@ public class SensorReadoutActivity extends Activity {
     /**
      * Periodically called by the ticker
      *
-     * @param currentEvent
+     * @param accEvent,gyroEvent
      *          current sensor data.
      */
-    protected void onTick(SensorEvent currentEvent) {
+    protected void doPdrDraw(SensorEvent accEvent, SensorEvent gyroEvent) {
 
         float NS2S=1.0f/1000000000.0f;//纳秒转为秒
         if(timeStart==0){
-            timeStart=currentEvent.timestamp;
+            timeStart=accEvent.timestamp;
             timestamp=0;
         }
         else
-            timestamp=(currentEvent.timestamp-timeStart)*NS2S;
-        float xvalue = timestamp;
-        float yvalue = (float)Math.sqrt(currentEvent.values[0]*currentEvent.values[0]+currentEvent.values[1]*currentEvent.values[1]+currentEvent.values[2]*currentEvent.values[2]);
+            timestamp=(accEvent.timestamp-timeStart)*NS2S;
+        float yvalue = (float)Math.sqrt(accEvent.values[0]*accEvent.values[0]+accEvent.values[1]*accEvent.values[1]+accEvent.values[2]*accEvent.values[2]);
         float lpyvalue = 0;
         if(xTick+1>N_windows)
             lpyvalue = filter(yvalue);
         else
             value_buf[xTick] = yvalue;
-        float[] valueSet = new float[2];
-        valueSet[0] = yvalue; valueSet[1] = lpyvalue;
+        float[] euler = mMadgwick.rotMat2euler(mMadgwick.quatern2rotMat(mMadgwick.MadgwickAHRSupdateGyro(gyroEvent.values[0], gyroEvent.values[1], gyroEvent.values[2])));
+        heading = euler[2];
+        tvHeading.setText(String.format("%.2f", heading * 180 / Math.PI));
+        //Log.d(TAG,String.format("%.2f,%f",timestamp,lpyvalue));
         if (stepDetecter(timestamp,lpyvalue)){
             stepNo= stepNo+1;
-            tvStep.setText(Integer.toString(stepNo));
-        }
-        if (xTick == 0) {
-            // Dirty, but we only learn a few things after getting the first event.
-            configure(valueSet);
-            //setContentView(chartView);
-        }
-
-        if (xTick > renderer.getXAxisMax()) {
-            renderer.setXAxisMax(xTick);
-            renderer.setXAxisMin(++lastMinX);
-        }
-        if (xTick < renderer.getXAxisMin()) {
-            renderer.setXAxisMin(xTick);
-            renderer.setXAxisMax(xTick+200);
-        }
-
-        fitYAxis(valueSet);
-        for (int i = 0; i < channel.length; i++) {
-            if (channel[i] != null) {
-                channel[i].add(xTick, valueSet[i]);
+            if(stepNo==1) {
+                locationx = (float)(0f + stepLength * Math.sin(heading));
+                locationy = (float)(0f + stepLength * Math.cos(heading));
             }
+            else {
+                locationx = (float)(locationx + stepLength * Math.sin(heading));
+                locationy = (float)(locationy + stepLength * Math.cos(heading));
+            }
+            tvStep.setText(String.format("%s",stepNo));
+            tvLocation.setText(String.format("( %.2f, %.2f)", locationx, locationy));
+            map.addStep(new PointF(-locationx,locationy));
+            map.setPos(-locationx * map.getScaleX(), locationy * map.getScaleY(), 30, 30, (float) Math.PI, true);
+            multiTouchView.invalidate();
         }
         xTick++;
-        chartView.repaint();
+    }
+    @Override
+    public void invalidate() {
+        if (multiTouchView != null) {
+            multiTouchView.invalidate();
+        }
     }
 
-    /**
-     * Make sure the Y axis is large enough to display the graph
-     *
-     * @param value
-     *          current event
-     */
-    private void fitYAxis(float[] value) {
-        double min = renderer.getYAxisMin(), max = renderer.getYAxisMax();
-        for (int i = 0; i < channel.length; i++) {
-            if (value[i] < min) {
-                min = value[i];
-            }
-            if (value[i] > max) {
-                max = value[i];
-            }
-        }
-        float sum = 0;
-        for (int i = 0; i < value.length; i++) {
-            sum += value[i];
-        }
-        double half = 0;
-        if (xTick == 0 && sum == value[0] * value.length) {
-            // If the plot flatlines(ƽ��) on the first event, we can't grade the Y axis(min==max).
-            // This is especially bad if the sensor does not change without a
-            // stimulus. the graph will then flatline on the x-axis where it is
-            // impossible to be seen.
-            half = value[0] * 0.5 + 1;//if values[0]==0; half=1;
-        }
-        renderer.setYAxisMax(max + half);
-        renderer.setYAxisMin(min - half);
-    }
-
-    /**
-     * Final configuration step. Must be called between receiving the first
-     * <code>SensorEvent</code> and updating the graph for the first time.
-     *
-     * @param value
-     *          the event
-     */
-    private void configure(float[] value) {
-        String[] channelNames = new String[value.length];
-        channel = new XYSeries[value.length];
-        for (int i = 0; i < channelNames.length; i++) {
-            channelNames[i] = getString(R.string.channel_default) + i;
-        }
-
-        int[] colors = {
-                Color.BLUE,
-                Color.RED,
-                Color.GREEN,
-                Color.YELLOW,
-                Color.MAGENTA,
-                Color.CYAN };
-        for (int i = 0; i < channel.length; i++) {
-            channel[i] = new XYSeries(channelNames[i]);
-            sensorData.addSeries(channel[i]);
-            XYSeriesRenderer r = new XYSeriesRenderer();
-            r.setColor(colors[i % colors.length]);
-            renderer.addSeriesRenderer(r);
-        }
-    }
 }
-
-
