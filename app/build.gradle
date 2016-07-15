@@ -22,7 +22,10 @@ android {
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
+    compile files('src/main/libs/achartengine-1.1.0.jar')
     compile 'com.android.support:appcompat-v7:22.2.1'
     compile 'com.github.PhilJay:MPAndroidChart:v3.0.0-beta1'
-    compile files('src/main/libs/achartengine-1.1.0.jar')
+    compile 'com.android.support:design:22.2.1'
+    compile files('libs/ormlite-android-4.49-SNAPSHOT.jar')
+    compile files('libs/ormlite-core-4.49-SNAPSHOT.jar')
 }
