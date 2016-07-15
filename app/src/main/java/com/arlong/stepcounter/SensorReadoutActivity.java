@@ -1,49 +1,21 @@
 package com.arlong.stepcounter;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.PointF;
-import android.graphics.drawable.AnimationDrawable;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
-import android.text.InputType;
 import android.util.Log;
-import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ExpandableListView;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
-import com.j256.ormlite.android.apptools.OpenHelperManager;
-import com.j256.ormlite.dao.Dao;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-
-import filebrowser.FileBrowser;
-
-public class SensorReadoutActivity extends Activity implements  OnClickListener,RefreshableView, LocationChangeListener{
+public class SensorReadoutActivity extends Activity implements  OnClickListener,RefreshableView{
 
     // Sensor 配置
     private static final String TAG = "SensorScan";
@@ -68,12 +40,7 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
     private float locationx, locationy;
     //采样频率
     public static final int sampleRate = 20;
-    public static boolean getInitAngle = false;
 
-    // UI 配置
-    private Button btnScanStart;
-    private Button btnScanStop;
-    private Button btnClear;
     private TextView tvStep;
     private TextView tvStepLength;
     private TextView tvHeading;
@@ -93,140 +60,29 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
     public float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;	// quaternion of sensor frame relative to auxiliary frame
 
     protected SiteMapDrawable map;
-    protected float scalerDistance;
-    /**
-     * @uml.property name="site"
-     * @uml.associationEnd
-     */
-    protected ProjectSite site;
-    /**
-     * @uml.property name="databaseHelper"
-     * @uml.associationEnd
-     */
-    protected DatabaseHelper databaseHelper = null;
-    /**
-     * @uml.property name="stepDetectionProvider"
-     * @uml.associationEnd
-     */
-    protected StepDetectionProvider stepDetectionProvider = null;
-    protected Dao<ProjectSite, Integer> projectSiteDao = null;
-    public static final String SITE_KEY = "SITE";
-    /**
-     * @uml.property name="scaler"
-     * @uml.associationEnd
-     */
-    protected ScaleLineDrawable scaler = null;
     /**
      * @uml.property name="user"
      * @uml.associationEnd
      */
-    protected UserDrawable user;
-    protected NorthDrawable northDrawable = null;
-    protected Logger log = new Logger(SensorReadoutActivity.class);
     private Thread ticker;
     private int xTick = 0;
     private Madgwick mMadgwick = new Madgwick();
 
-    //Dialog
-    protected static final int  DIALOG_SET_BACKGROUND = 1, DIALOG_SET_SCALE_OF_MAP = 2, DIALOG_ASK_CHANGE_SCALE = 3, DIALOG_ASK_FOR_NORTH = 4;
-    protected Handler messageHandler;
-    protected static final int MESSAGE_REFRESH = 1, MESSAGE_START_WIFISCAN = 2, MESSAGE_PERSIST_RESULT = 3;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        try{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Log.d(TAG, "on Create");
-        Intent intent = this.getIntent();
-
-        int siteId = intent.getExtras().getInt(SITE_KEY,-1);
-        if (siteId == -1) {
-            throw new SiteNotFoundException("ProjectSiteActivity called without a correct site ID!");
-        }
-
-        databaseHelper = OpenHelperManager.getHelper(this, DatabaseHelper.class);
-        projectSiteDao = databaseHelper.getDao(ProjectSite.class);
-        site = projectSiteDao.queryForId(siteId);
-
-        if (site == null) {
-            throw new SiteNotFoundException("The ProjectSite Id could not be found in the database!");
-        }
-
-        MultiTouchDrawable.setGridSpacing(site.getGridSpacingX(), site.getGridSpacingY());
-
-        map = new SiteMapDrawable(this, this);
-        map.setAngleAdjustment(site.getNorth());
-        //MultiTouchDrawable.setGridSpacing(100, 100);
-        if (site.getWidth() == 0 || site.getHeight() == 0) {
-            // the site has never been loaded
-            site.setSize(map.getWidth(), map.getHeight());
-        } else {
-            map.setSize(site.getWidth(), site.getHeight());
-        }
-        if (site.getBackgroundBitmap() != null) {
-            map.setBackgroundImage(site.getBackgroundBitmap());
-        }
-        //map = new SiteMapDrawable(this,this);
-       // map.setScale(30, 30);
-       // map.setPos(0, 0, 30, 30, (float) Math.PI, true);
-       // map.setSize(map.width / 50, map.height / 50);
-       // multiTouchView.setRearrangable(false);
-       // multiTouchView.addDrawable(map);
-
-        user = new UserDrawable(this, map);
-
-        if (site.getLastLocation() != null) {
-            user.setRelativePosition(site.getLastLocation().getX(), site.getLastLocation().getY());
-        } else {
-            user.setRelativePosition(map.getWidth() / 2, map.getHeight() / 2);
-        }
-        LocationServiceFactory.getLocationService().setRelativeNorth(site.getNorth());
-        LocationServiceFactory.getLocationService().setGridSpacing(site.getGridSpacingX(), site.getGridSpacingY());
-        stepDetectionProvider = new StepDetectionProvider(this);
-        stepDetectionProvider.setLocationChangeListener(this);
-
-        messageHandler = new Handler() {
-            @Override
-            public void handleMessage(Message msg) {
-                switch (msg.what) {
-                    case MESSAGE_REFRESH:
-                    /* Refresh UI */
-                        if (multiTouchView != null)
-                            multiTouchView.invalidate();
-                        break;
-                }
-            }
-        };
         initUI();
         initSensors();
-        } catch (Exception ex) {
-            log.error("Failed to create ProjectSiteActivity: " + ex.getMessage(), ex);
-            Toast.makeText(this, R.string.project_site_load_failed, Toast.LENGTH_LONG).show();
-            this.finish();
-        }
-    }
-    /*
- * (non-Javadoc)
- *
- * @see android.app.Activity#onDestroy()
- */
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (databaseHelper != null) {
-            OpenHelperManager.releaseHelper();
-            databaseHelper = null;
-        }
-    }
+        MultiTouchDrawable.setGridSpacing(100,100);
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        log.debug("setting context");
-
-        multiTouchView.loadImages(this);
-        map.load();
-        // stepDetectionProvider.start();
+        map = new SiteMapDrawable(this,this);
+        map.setScale(30, 30);
+        map.setPos(0, 0, 30, 30, (float) Math.PI, true);
+        map.setSize(map.width / 50, map.height / 50);
+        multiTouchView.setRearrangable(false);
+        multiTouchView.addDrawable(map);
 
     }
     //Sensor 函数
@@ -255,20 +111,6 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
                     e.printStackTrace();
                 }
                 break;
-
-            case R.id.project_site_toggle_autorotate:
-
-                ToggleButton button = (ToggleButton) findViewById(R.id.project_site_toggle_autorotate);
-
-                if (button.isChecked()) {
-                    map.startAutoRotate();
-                    Logger.d("Started autorotate.");
-                } else {
-                    map.stopAutoRotate();
-                    Logger.d("Stopped autorotate.");
-                }
-
-                break;
         }
     }
 
@@ -280,17 +122,11 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
         ((Button)findViewById(R.id.scanStart)).setOnClickListener(this);
         ((Button)findViewById(R.id.scanStop)).setOnClickListener(this);
         ((Button)findViewById(R.id.btnClear)).setOnClickListener(this);
-        ((ToggleButton) findViewById(R.id.project_site_toggle_autorotate)).setOnClickListener(this);
         tvStep = (TextView)findViewById(R.id.tvStep);
         tvStepLength = (TextView)findViewById(R.id.tvStepLength);
         tvHeading = (TextView)findViewById(R.id.tvHeading);
         tvLocation = (TextView)findViewById(R.id.tvLocation);
         multiTouchView = ((MultiTouchView) findViewById(R.id.mapView));
-        multiTouchView.setRearrangable(false);
-
-        multiTouchView.addDrawable(map);
-        // start configuration dialog
-        Dialogshow(DIALOG_SET_BACKGROUND);
     }
     private void initSensors(){
         sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
@@ -364,15 +200,20 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
         peakmax[0] = 0;peakmin[0] = 0;
         peakmax[1] = 0;peakmin[1] =0;
         Log.d(TAG, "Start Listener");
-        if (!stepDetectionProvider.isRunning()) {
-            stepDetectionProvider.start();
-        }
+        ticker = new Ticker(this);
+        ticker.start();
+        sensorManager.registerListener((SensorEventListener) ticker, accSensor, 1000 / sampleRate);
+        sensorManager.registerListener((SensorEventListener) ticker, gyroSensor, 1000 / sampleRate);
         doNotify("Scan Starting");
 
     }
     private void doStopScan() throws Exception {
-        Log.d(TAG, "Stop Scan");
+        Log.d(TAG,"Stop Scan");
         Log.d(TAG, "Stop Listener");
+        sensorManager.unregisterListener((SensorEventListener) ticker);
+        ticker.interrupt();
+        ticker.join();
+        ticker = null;
         doNotify("Scan Stop!");
     }
     private void doClear() throws Exception{
@@ -458,282 +299,5 @@ public class SensorReadoutActivity extends Activity implements  OnClickListener,
             multiTouchView.invalidate();
         }
     }
-    protected TextView backgroundPathTextView;
-    protected final Context context = this ;
-    protected static final int FILEBROWSER_REQUEST =1;
 
-    protected void setBackgroundImage(String path) {
-
-        try {
-            Bitmap bmp = BitmapFactory.decodeFile(path);
-            site.setBackgroundBitmap(bmp);
-            map.setBackgroundImage(bmp);
-            site.setSize(bmp.getWidth(), bmp.getHeight());
-            map.setSize(bmp.getWidth(), bmp.getHeight());
-            user.setRelativePosition(bmp.getWidth() / 2, bmp.getHeight() / 2);
-            multiTouchView.invalidate();
-            Toast.makeText(context, "set " + path + " as new background image!", Toast.LENGTH_LONG).show();
-
-        } catch (Exception e) {
-            Logger.e("could not set background", e);
-            Toast.makeText(context, getString(R.string.project_site_set_background_failed, e.getMessage()), Toast.LENGTH_LONG).show();
-        }
-    }
-    protected Dialog CreateDialog(int id) {
-        switch (id) {
-
-            case DIALOG_SET_BACKGROUND:
-
-                AlertDialog.Builder bckgAlert = new AlertDialog.Builder(this);
-                bckgAlert.setTitle(R.string.project_site_dialog_background_title);
-                bckgAlert.setMessage(R.string.project_site_dialog_background_message);
-
-                LinearLayout bckgLayout = new LinearLayout(this);
-                bckgLayout.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                bckgLayout.setGravity(Gravity.CENTER);
-                bckgLayout.setOrientation(LinearLayout.VERTICAL);
-                bckgLayout.setPadding(5, 5, 5, 5);
-
-                final TextView pathTextView = new TextView(this);
-                backgroundPathTextView = pathTextView;
-                pathTextView.setText(R.string.project_site_dialog_background_default_path);
-                pathTextView.setPadding(10, 0, 10, 10);
-
-                bckgLayout.addView(pathTextView);
-
-                Button pathButton = new Button(this);
-                pathButton.setText(R.string.project_site_dialog_background_path_button);
-                pathButton.setOnClickListener(new View.OnClickListener() {
-
-                    @Override
-                    public void onClick(View v) {
-                        Intent i = new Intent(context, FileBrowser.class);
-                        i.putExtra(FileBrowser.EXTRA_MODE, FileBrowser.MODE_LOAD);
-                        i.putExtra(FileBrowser.EXTRA_ALLOWED_EXTENSIONS, "jpg,png,gif,jpeg,bmp");
-                        startActivityForResult(i, FILEBROWSER_REQUEST);
-                    }
-
-                });
-
-                bckgLayout.addView(pathButton);
-
-                bckgAlert.setView(bckgLayout);
-
-                bckgAlert.setPositiveButton(getString(R.string.button_ok), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        setBackgroundImage(pathTextView.getText().toString());
-                            Dialogshow(DIALOG_ASK_CHANGE_SCALE);
-                    }
-                });
-
-                bckgAlert.setNegativeButton(getString(R.string.button_cancel), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        // Canceled.
-                        //freshSite = false;
-                    }
-                });
-
-                Dialog bckgDialog = bckgAlert.create();
-                bckgDialog.setCanceledOnTouchOutside(true);
-
-                return bckgDialog;
-
-            case DIALOG_SET_SCALE_OF_MAP:
-                AlertDialog.Builder scaleOfMapDialog = new AlertDialog.Builder(this);
-
-                scaleOfMapDialog.setTitle(R.string.project_site_dialog_scale_of_map_title);
-                scaleOfMapDialog.setMessage(R.string.project_site_dialog_scale_of_map_message);
-
-                // Set an EditText view to get user input
-                final EditText scaleInput = new EditText(this);
-                scaleInput.setSingleLine(true);
-                scaleInput.setRawInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-                scaleOfMapDialog.setView(scaleInput);
-
-                scaleOfMapDialog.setPositiveButton(getString(R.string.button_ok), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-
-                        try {
-                            float value = Float.parseFloat(scaleInput.getText().toString());
-                            setScaleOfMap(value);
-                        } catch (NumberFormatException nfe) {
-                            Logger.w("Wrong number format format!");
-                            Toast.makeText(context, getString(R.string.not_a_number, scaleInput.getText()), Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-
-                scaleOfMapDialog.setNegativeButton(getString(R.string.button_cancel), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        // Canceled.
-                    }
-                });
-
-                return scaleOfMapDialog.create();
-
-            case DIALOG_ASK_CHANGE_SCALE:
-
-                AlertDialog.Builder askScaleBuilder = new AlertDialog.Builder(context);
-                askScaleBuilder.setTitle(R.string.project_site_dialog_ask_change_scale_title);
-                askScaleBuilder.setMessage(R.string.project_site_dialog_ask_change_scale_message);
-
-                askScaleBuilder.setPositiveButton(getString(R.string.button_yes), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        scaleOfMap();
-                    }
-
-                });
-
-                askScaleBuilder.setNegativeButton(getString(R.string.button_no), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        // Canceled.
-                        //freshSite = false;
-                    }
-                });
-
-                return askScaleBuilder.create();
-
-            case DIALOG_ASK_FOR_NORTH:
-
-                AlertDialog.Builder askNorthBuilder = new AlertDialog.Builder(context);
-                askNorthBuilder.setTitle(R.string.project_site_dialog_ask_north_title);
-                askNorthBuilder.setMessage(R.string.project_site_dialog_ask_north_message);
-
-                askNorthBuilder.setPositiveButton(getString(R.string.button_yes), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        setMapNorth();
-                        //freshSite = false;
-                    }
-
-                });
-
-                askNorthBuilder.setNegativeButton(getString(R.string.button_no), new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int whichButton) {
-                        // Canceled.
-                        //freshSite = false;
-                    }
-                });
-
-                return askNorthBuilder.create();
-            default:
-                return CreateDialog(id);
-        }
-    }
-    protected void setScaleOfMap(float scale) {
-        float mapScale = scalerDistance / scale;
-        site.setGridSpacingX(mapScale);
-        site.setGridSpacingY(mapScale);
-        LocationServiceFactory.getLocationService().setGridSpacing(site.getGridSpacingX(), site.getGridSpacingY());
-        MultiTouchDrawable.setGridSpacing(mapScale, mapScale);
-        multiTouchView.invalidate();
-        Toast.makeText(this, getString(R.string.project_site_mapscale_changed, mapScale), Toast.LENGTH_SHORT).show();
-            Dialogshow(DIALOG_ASK_FOR_NORTH);
-    }
-    protected void onMapScaleSelected() {
-        scalerDistance = scaler.getSliderDistance();
-        scaler.removeScaleSliders();
-        map.removeSubDrawable(scaler);
-        scaler = null;
-        invalidate();
-        Dialogshow(DIALOG_SET_SCALE_OF_MAP);
-    }
-    protected void scaleOfMap() {
-        if (scaler == null) {
-            scaler = new ScaleLineDrawable(context, map, new OkCallback() {
-
-                @Override
-                public void onOk() {
-                    onMapScaleSelected();
-                }
-            });
-            scaler.getSlider(1).setRelativePosition(user.getRelativeX() - 80, user.getRelativeY());
-            scaler.getSlider(2).setRelativePosition(user.getRelativeX() + 80, user.getRelativeY());
-            multiTouchView.invalidate();
-        } else {
-            onMapScaleSelected();
-        }
-    }
-    protected void setMapNorth() {
-        if (northDrawable == null) {
-            // Stop auto-rotate when map north is set
-            ((ToggleButton) findViewById(R.id.project_site_toggle_autorotate)).setChecked(false);
-            map.stopAutoRotate();
-
-            // create the icon the set the north
-            northDrawable = new NorthDrawable(this, map, site) {
-
-                /*
-                 * (non-Javadoc)
-                 *
-                 * @see at.fhstp.wificompass.view.NorthDrawable#onOk()
-                 */
-                @Override
-                public void onOk() {
-                    super.onOk();
-                    northDrawable = null;
-                    site.setNorth(ToolBox.normalizeAngle(adjustmentAngle));
-                    map.setAngleAdjustment(site.getNorth());
-
-                    LocationServiceFactory.getLocationService().setRelativeNorth(site.getNorth());
-                    Logger.d("set adjustment angle of map to " + site.getNorth());
-                    Toast.makeText(ctx, R.string.project_site_nort_set, Toast.LENGTH_SHORT).show();
-                    //saveProjectSite();
-                    getInitAngle = true;
-                }
-
-            };
-            northDrawable.setRelativePosition(site.getWidth() / 2, site.getHeight() / 2);
-            northDrawable.setAngle(map.getAngle() + site.getNorth());
-
-        } else {
-            map.removeSubDrawable(northDrawable);
-            // do not set the angle, if the menu option is clicked
-            // site.setNorth(northDrawable.getAngle());
-            // LocationServiceFactory.getLocationService().setRelativeNorth(site.getNorth());
-            northDrawable = null;
-        }
-
-        multiTouchView.invalidate();
-
-    }
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-
-        Logger.d("Activity result of " + requestCode + " " + resultCode + " " + (data != null ? data.toString() : ""));
-
-        switch (requestCode) {
-            case FILEBROWSER_REQUEST:
-
-                if (resultCode == Activity.RESULT_OK && data != null) {
-                    String path = data.getExtras().getString(FileBrowser.EXTRA_PATH);
-
-                    if (backgroundPathTextView != null) {
-                        backgroundPathTextView.setText(path);
-                    } else {
-                        Logger.w("the background image dialog textview should not be null?!?");
-                    }
-                }
-                break;
-
-            default:
-                super.onActivityResult(requestCode, resultCode, data);
-                break;
-        }
-
-    }
-    @Override
-    public void onLocationChange(Location loc) {
-        // info from StepDetectionProvider, that the location changed.
-        user.setRelativePosition(loc.getX(), loc.getY());
-        map.addStep(new PointF(loc.getX(), loc.getY()));
-        messageHandler.sendEmptyMessage(MESSAGE_REFRESH);
-    }
-
-    public void refreshUI(float heading){
-        tvHeading.setText(String.format("%.2f",heading));
-    }
-
-    protected void Dialogshow(int id){
-        CreateDialog(id).show();
-    }
 }

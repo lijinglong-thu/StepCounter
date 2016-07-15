@@ -14,13 +14,10 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 
-import com.arlong.stepcounter.CompassListener;
-import com.arlong.stepcounter.MultiTouchDrawable;
-
 /**
  * @author Paul Woelfel (paul@woelfel.at)
  */
-public class SiteMapDrawable extends MultiTouchDrawable implements CompassListener {
+public class SiteMapDrawable extends MultiTouchDrawable {
 
 	/**
 	 * @uml.property name="backgroundImage"
@@ -51,15 +48,6 @@ public class SiteMapDrawable extends MultiTouchDrawable implements CompassListen
 		backgroundImage = null;
 		steps = new Vector<PointF>();
 		this.resetXY();
-	}
-
-	public void startAutoRotate() {
-		CompassMonitor.registerListener(ctx, this);
-		Logger.d("Auto rotate started. North value: " + angleAdjustment);
-	}
-
-	public void stopAutoRotate() {
-		CompassMonitor.unregisterListener(this);
 	}
 
 	public Drawable getDrawable() {
@@ -265,21 +253,6 @@ public class SiteMapDrawable extends MultiTouchDrawable implements CompassListen
 	 * 
 	 * @see at.fhstp.wificompass.view.MultiTouchDrawable#bringSubDrawableToFront(at.fhstp.wificompass.view.MultiTouchDrawable)
 	 */
-	@Override
-	protected void bringSubDrawableToFront(MultiTouchDrawable drawable) {
-		super.bringSubDrawableToFront(drawable);
-
-		if (!(drawable instanceof UserDrawable)) {
-			// user should be one of the last drawables, so we search the vector reverse
-			for (int i = subDrawables.size() - 1; i >= 0; i--) {
-				if (subDrawables.get(i) instanceof UserDrawable) {
-					// the user should always be in front
-					subDrawables.get(i).bringToFront();
-					break;
-				}
-			}
-		}
-	}
 
 	/*
 	 * (non-Javadoc)
@@ -292,23 +265,6 @@ public class SiteMapDrawable extends MultiTouchDrawable implements CompassListen
 		return true;
 	}
 
-	public void setAngleAdjustment(float adjustment) {
-		this.angleAdjustment = adjustment;
-		this.angleChangeCallback = null;
-	}
-
-	@Override
-	public void onCompassChanged(float azimuth, float angle, String direction) {
-		// azimuth = (float) Math.toRadians(azimuth);
-		float adjusted = ToolBox.normalizeAngle((angle + angleAdjustment) * -1.0f);
-
-		// filter small movements
-		if (Math.abs(lastAngle - adjusted) > MIN_ANGLE_CHANGE) {
-			this.setAngle(adjusted);
-			this.recalculatePositions();
-			this.lastAngle = adjusted;
-		}
-	}
 
 	/**
 	 *

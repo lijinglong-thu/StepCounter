@@ -17,7 +17,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme" >
         <activity
-            android:name=".MainActivity"
+            android:name=".SensorReadoutActivity"
+            android:configChanges="orientation"
             android:label="@string/app_name" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,16 +26,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name="filebrowser.FileBrowser"
-            android:label="File Browser"
-            android:configChanges="orientation">
-        </activity>
-        <activity
-            android:name=".SensorReadoutActivity"
-            android:label="Sensor Readout"
-            android:configChanges="orientation">
-        </activity>
     </application>
-
 </manifest>
