@@ -18,8 +18,7 @@
     <string name="wifi_scan">Quick scan</string>
     <string name="newProjectText">Create a new project</string>
     <string name="loadProject">Load project</string>
-<string name="main_info_text">Welcome to WiFi Compass! \nCreate a project or use
-    Quick Scan.
+<string name="main_info_text">Welcome to \nIndoor Localization Application!.
 </string>
 <string name="aboutText">
 &lt;h1&gt;WiFi Compass&lt;/h1&gt;
@@ -246,9 +245,8 @@ Icons by &lt;a href="http://mapicons.nicolasmollet.com/"&gt;Maps Icons Collectio
 <string name="project_site_scanresults_not_persisted">WiFi scan results could not be saved:\n%1$s
 </string>
     <string name="project_site_dialog_fresh_site_title">Project Site Initial Setup</string>
-<string name="project_site_dialog_fresh_site_message">This fresh created project site does not have a map
-    loaded, which would ease navigation. \nThis could also be done later
-    unter Options -> Map Settings. \n\nDo you want to do that now?
+<string name="project_site_dialog_fresh_site_message">This fresh project site does not have a map
+    loaded, which would ease navigation. \n
 </string>
     <string name="project_site_create_failed">could not create Project Site!</string>
     <string name="project_site_set_scale_of_map">Set Map Scale</string>
@@ -257,7 +255,7 @@ Icons by &lt;a href="http://mapicons.nicolasmollet.com/"&gt;Maps Icons Collectio
 </string>
     <string name="project_site_dialog_ask_change_scale_title">Change Scale of Map</string>
 <string name="project_site_dialog_ask_change_scale_message">We need to know how much pixels is one meter to
-    calculate the correct positions of APs and track your
+    calculate the correct positions and track your
     movement.\n\nWould you like to define this now?
 </string>
     <string name="project_site_dialog_ask_north_title">Set North</string>

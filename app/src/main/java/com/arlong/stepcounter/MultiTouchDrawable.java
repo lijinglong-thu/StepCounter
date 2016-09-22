@@ -84,7 +84,7 @@ public abstract class MultiTouchDrawable {
 	 * @uml.associationEnd  
 	 */
 	protected MultiTouchDrawable superDrawable = null;
-
+	protected AngleChangeCallback angleChangeCallback = null;
 	/**
 	 * @uml.property  name="gridSpacingX"
 	 */
@@ -955,6 +955,20 @@ public abstract class MultiTouchDrawable {
 		return subDrawables;
 	}
 
+	/**
+	 * tries to bring the current element to the front.
+	 *
+	 * @return true, if this element could be brought to front
+	 */
+	public boolean bringToFront() {
+		if (superDrawable != null) {
+			superDrawable.bringSubDrawableToFront(this);
+			return true;
+		} else {
+			Logger.d("we can't bring ourselfs to front, because we are not attached to a super drawable");
+		}
+		return false;
+	}
 
 	protected void bringSubDrawableToFront(MultiTouchDrawable drawable) {
 		// do we need the clean way?
@@ -965,7 +979,15 @@ public abstract class MultiTouchDrawable {
 		subDrawables.remove(drawable);
 		subDrawables.add(drawable);
 	}
+	public void deleteDrawable() {
+		if (this.superDrawable == null) {
+			Logger.d("don't know how to delete myself, if I have not super Drawable");
+		} else {
+			superDrawable.subDrawables.remove(this);
 
+		}
+		onDelete();
+	}
 	/**
 	 * this method is called, if this method is deleted
 	 */
@@ -1012,4 +1034,9 @@ public abstract class MultiTouchDrawable {
 	public static float getGridSpacingY() {
 		return gridSpacingY;
 	}
+
+	public void setAngleChangeCallback(AngleChangeCallback callback) {
+		this.angleChangeCallback = callback;
 	}
+}
+

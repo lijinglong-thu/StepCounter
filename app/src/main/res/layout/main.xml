@@ -11,14 +11,14 @@
         style="@style/textview"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="10dp"
-        android:drawableLeft="@drawable/icon_small"
+        android:layout_marginBottom="30dp"
         android:gravity="center"
         android:text="@string/main_info_text"
-        android:textSize="16sp" />
+        android:textSize="20sp" />
 
     <Button
         android:id="@+id/main_quickscan_button"
+        android:background="@drawable/btn_blue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="10dp"
@@ -27,6 +27,7 @@
 
     <Button
         android:id="@+id/new_project_button"
+        android:background="@drawable/btn_blue"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="10dp"

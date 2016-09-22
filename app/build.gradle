@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 22
-    buildToolsVersion "22.0.1"
+    buildToolsVersion '22.0.1'
 
     defaultConfig {
         applicationId "com.arlong.stepcounter"
@@ -28,4 +28,6 @@ dependencies {
     compile 'com.android.support:design:22.2.1'
     compile files('libs/ormlite-android-4.49-SNAPSHOT.jar')
     compile files('libs/ormlite-core-4.49-SNAPSHOT.jar')
+
+    compile project(':sliding_menu')
 }
